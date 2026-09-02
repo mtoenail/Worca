@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "alpaca-trading-backtest": {
+      "source": "alpacahq/alpaca-skills",
+      "sourceType": "github",
+      "skillPath": "skills/trading-api/backtest/SKILL.md",
+      "computedHash": "47ac9355c38da95d4444c29358fa65d2c4e297e93a8f940327f52e03eac2a3c1"
+    },
+    "alpaca-trading-paper-trading-mcp": {
+      "source": "alpacahq/alpaca-skills",
+      "sourceType": "github",
+      "skillPath": "skills/trading-api/paper-trading-mcp/SKILL.md",
+      "computedHash": "dfc0b701fc6267182e357ee46e0ee7b1b732261818cd70f17c080d6041ac3959"
+    }
+  }
+}

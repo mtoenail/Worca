@@ -1,7 +1,46 @@
 # greeks.py  — local Black-Scholes fallback for when the feed returns None
+import math
 import numpy as np
-from scipy.stats import norm
-from scipy.optimize import brentq
+
+try:
+    from scipy.optimize import brentq
+except Exception:
+    def brentq(f, a, b, xtol=1e-8, maxiter=100):
+        fa, fb = f(a), f(b)
+        if fa * fb > 0:
+            raise ValueError("Root is not bracketed")
+        for _ in range(maxiter):
+            mid = 0.5 * (a + b)
+            if abs(b - a) < xtol:
+                return mid
+            fmid = f(mid)
+            if abs(fmid) < xtol or fmid == 0:
+                return mid
+            if fa * fmid < 0:
+                b, fb = mid, fmid
+            else:
+                a, fa = mid, fmid
+        return 0.5 * (a + b)
+
+_INV_SQRT_2PI = 1.0 / math.sqrt(2.0 * math.pi)
+_SQRT_2 = math.sqrt(2.0)
+
+class _Norm:
+    """Lightweight normal distribution replacing scipy.stats.norm.
+    Avoids Windows Application Control / WDAC policy blocking on scipy C-extension DLLs
+    and provides significantly faster scalar and vectorized evaluations.
+    """
+    @staticmethod
+    def pdf(x):
+        return _INV_SQRT_2PI * np.exp(-0.5 * (np.asarray(x, dtype=float) ** 2))
+
+    @staticmethod
+    def cdf(x):
+        if isinstance(x, np.ndarray):
+            return 0.5 * (1.0 + np.vectorize(math.erf)(x / _SQRT_2))
+        return 0.5 * (1.0 + math.erf(float(x) / _SQRT_2))
+
+norm = _Norm()
 
 def bs_price(S, K, T, r, sigma, call=True):
     if T <= 0 or sigma <= 0: return max(0.0, (S-K) if call else (K-S))

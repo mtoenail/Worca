@@ -75,3 +75,14 @@ def bs_gamma_vec(S, K, T, r, sigma):
     d1 = (np.log(S / K[m]) + (r + sigma[m] ** 2 / 2) * T[m]) / (sigma[m] * np.sqrt(T[m]))
     out[m] = norm.pdf(d1) / (S * sigma[m] * np.sqrt(T[m]))
     return out
+
+def bs_delta(S, K, T, r, sigma, call=True):
+    """Delta, for strike selection when the feed omits greeks.
+
+    The executor picks the ~0.35-delta strike, so a missing delta on the one contract
+    we intended to trade would otherwise silently shift the trade to a different strike.
+    """
+    if T <= 0 or sigma <= 0:
+        return (1.0 if S > K else 0.0) if call else (-1.0 if S < K else 0.0)
+    d1 = (np.log(S/K) + (r + sigma**2/2)*T) / (sigma*np.sqrt(T))
+    return float(norm.cdf(d1)) if call else float(norm.cdf(d1) - 1.0)

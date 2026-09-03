@@ -7,3 +7,8 @@ __pycache__/
 *.csv
 _t_*.csv
 *.legacy
+
+oracle_log.jsonl
+trade_log.jsonl
+shadow_book.json
+shadow_equity.csv

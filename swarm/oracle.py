@@ -49,7 +49,8 @@ The allocations must sum to at most 1.0."""
 @dataclass
 class Decision:
     ts: str
-    allocations: dict                    # {signal_id: fraction}
+    allocations: dict                    # {signal_id: fraction}, after hysteresis
+    model_allocations: dict = field(default_factory=dict)   # what the model actually said
     regime: str = ""
     reasoning: str = ""
     fallback: bool = False               # True if this reuses the last good decision
@@ -71,12 +72,15 @@ class Oracle:
 
     def __init__(self, bus, model=DEFAULT_MODEL, log_path="oracle_log.jsonl",
                  interval_s=300, clamp=(0.1, 0.7), max_total=1.0, api_key=None,
-                 base_url=FEATHERLESS_BASE, timeout_s=30):
+                 base_url=FEATHERLESS_BASE, timeout_s=30,
+                 deadband=0.10, drop_confirms=2):
         self.bus, self.model, self.log_path = bus, model, log_path
         self.interval_s = interval_s
         self.clamp, self.max_total = clamp, max_total
         self.client = OpenAI(api_key=api_key or os.getenv("FEATHERLESS_API_KEY"),
                              base_url=base_url, timeout=timeout_s)
+        self.deadband, self.drop_confirms = deadband, drop_confirms
+        self._drops: dict[str, int] = {}     # signal_id -> consecutive cycles dropped
         self.last_good: Decision | None = None
 
     # ---------- input ----------
@@ -84,16 +88,32 @@ class Oracle:
     def sig_id(agent, underlying):
         return f"{agent}:{underlying}"
 
+    @staticmethod
+    def _quantize(data):
+        """Coarsen fields that change every cycle without changing the decision.
+
+        `data_age_s` ticks on every poll. Feeding it at 0.1s resolution makes the prompt
+        different on every call even when the market has not moved, which is enough to
+        flip a hosted model's output despite temperature=0. Bucketing it keeps the
+        freshness information (B4) while making an unchanged market produce an
+        unchanged prompt.
+        """
+        out = dict(data)
+        if "data_age_s" in out and out["data_age_s"] is not None:
+            out["data_age_s"] = round(float(out["data_age_s"]) / 30) * 30
+        return out
+
     def _serialize(self, snap):
         """Bus snapshot -> the JSON the model sees. Ids are the executor's handles too."""
         out = {}
+        now = datetime.now(timezone.utc)
         for (agent, underlying), s in snap.items():
             out[self.sig_id(agent, underlying)] = {
                 "agent": agent, "underlying": underlying,
                 "signal_type": s.signal_type, "direction": s.direction,
                 "strength": s.strength, "strength_basis": s.strength_basis,
-                "age_s": round((datetime.now(timezone.utc) - s.ts).total_seconds(), 1),
-                "data": s.data,
+                "age_bucket_s": round((now - s.ts).total_seconds() / 30) * 30,
+                "data": self._quantize(s.data),
             }
         return out
 
@@ -121,6 +141,38 @@ class Oracle:
         if total > self.max_total:
             clean = {k: round(v * self.max_total / total, 4) for k, v in clean.items()}
         return clean
+
+    def _stabilize(self, new):
+        """Suppress allocation churn that is model noise rather than a changed market.
+
+        Observed live on 2026-09-03: three consecutive cycles with materially identical
+        inputs produced 0.35, 0.00, 0.35. A hosted MoE at temperature=0 is not bit-
+        deterministic, and an allocation that oscillates is both untradeable and
+        indefensible to a reader.
+
+        Two rules, both deliberately conservative:
+          - a move smaller than `deadband` keeps the previous size;
+          - dropping a signal entirely must be confirmed on `drop_confirms` consecutive
+            cycles, because going flat is the most expensive thing a noisy cycle can do.
+        Any genuinely new signal, or a move larger than the deadband, passes straight
+        through - this damps noise, it does not veto the model.
+        """
+        prev = self.last_good.allocations if self.last_good else {}
+        out = dict(new)
+        for k, pv in prev.items():
+            if k in new:
+                self._drops.pop(k, None)
+                if abs(new[k] - pv) < self.deadband:
+                    out[k] = pv                      # too small a move to act on
+            else:
+                n = self._drops.get(k, 0) + 1
+                self._drops[k] = n
+                if n < self.drop_confirms:
+                    out[k] = pv                      # unconfirmed drop - hold the size
+        total = sum(out.values())
+        if total > self.max_total:
+            out = {k: round(v * self.max_total / total, 4) for k, v in out.items()}
+        return out
 
     # ---------- the call ----------
     def _call_model(self, payload):
@@ -150,9 +202,11 @@ class Oracle:
         if parsed is None:
             d = self._fallback(inputs, raw, fb_reason, latency)
         else:
-            allocs = self._sanitize(parsed.get("allocations"), set(inputs))
+            raw_allocs = self._sanitize(parsed.get("allocations"), set(inputs))
+            allocs = self._stabilize(raw_allocs)
             d = Decision(
                 ts=datetime.now(timezone.utc).isoformat(), allocations=allocs,
+                model_allocations=raw_allocs,
                 regime=str(parsed.get("regime", ""))[:200],
                 reasoning=str(parsed.get("reasoning", ""))[:1000],
                 latency_ms=latency, deployed_fraction=round(sum(allocs.values()), 4),

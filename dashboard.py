@@ -11,11 +11,11 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Quantamental Swarm", page_icon=":satellite:", layout="wide")
+st.set_page_config(page_title="Worca", page_icon=":satellite:", layout="wide")
 
 # A signal older than this is one the agent has stopped asserting - the bus expires it.
 # Mirrors swarm.bus.DEFAULT_TTL_S so this panel agrees with what the executor can see.
-SIGNAL_TTL_S = 300
+SIGNAL_TTL_S = 600
 
 
 # ---------------------------------------------------------------- loading
@@ -105,7 +105,7 @@ trades = read_jsonl(f"{run}/trade_log.jsonl")
 equity = read_csv(f"{run}/shadow_equity.csv")
 book = read_json(f"{run}/shadow_book.json")
 
-st.title("Quantamental Options Swarm")
+st.title("Worca")
 st.caption("Two specialist agents publish signals; an LLM Oracle allocates capital between "
            "them; every order passes the risk gates before it is sent. A shadow book "
            "records what each agent would have done with no Oracle at all.")

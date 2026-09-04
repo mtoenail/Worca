@@ -3,9 +3,14 @@ from datetime import datetime, timezone
 
 from swarm.schema import Signal
 
-# An agent republishes every `interval_s` (60s). A signal that has not been refreshed in
-# five poll cycles is not "slightly old" - the agent has stopped asserting it.
-DEFAULT_TTL_S = 300
+# Derived from MEASURED republish cadence, not from the configured poll interval.
+# `interval_s` is 60s, but that is the sleep BETWEEN passes: a pass fetches chains and
+# paginates open interest for every underlying, and on 2026-09-04 the observed gaps
+# between successive publishes were 120-270s, with one of 870s. A 300s TTL was expiring
+# signals the agents were still asserting, and the Oracle saw an empty bus on 8 of 11
+# cycles. 600s covers the observed cadence with margin while still expiring a genuinely
+# dead signal well inside a session.
+DEFAULT_TTL_S = 600
 
 
 class SignalBus:

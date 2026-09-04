@@ -12,7 +12,12 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Worca", page_icon=":satellite:", layout="wide")
+st.set_page_config(page_title="Worca", page_icon=":satellite:", layout="wide",
+                   initial_sidebar_state="collapsed")
+
+# The sidebar carries no controls any more; hide its expand arrow so the page reads
+# as one surface rather than looking like something is missing.
+st.markdown("<style>[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl']{display:none!important}</style>", unsafe_allow_html=True)
 
 # A signal older than this is one the agent has stopped asserting - the bus expires it.
 # Mirrors swarm.bus.DEFAULT_TTL_S so this panel agrees with what the executor can see.
@@ -105,22 +110,19 @@ def ts_col(df, col="ts"):
     return df.dropna(subset=[col])
 
 
-# ---------------------------------------------------------------- sidebar
-runs = sorted(d.replace("\\", "/") for d in glob.glob("results/*") if os.path.isdir(d))
-if not runs:
-    st.error("No runs under results/. Start the swarm: python main.py --tag dev")
-    st.stop()
+# ---------------------------------------------------------------- data source
+# No run picker: this dashboard shows the submitted account and nothing else. A selector
+# invites a viewer to switch to a development run and read numbers that were never part
+# of the submission.
+RUN = "results/submission"
+ENV_FILE = ".env.submission"
 
-st.sidebar.title("Swarm")
-default = next((i for i, r in enumerate(runs) if r.endswith("submission")), len(runs) - 1)
-run = st.sidebar.selectbox("Run", runs, index=default,
-                           help="One directory per account. Each has its own trade log.")
-env_file = st.sidebar.selectbox(
-    "Account keys", [".env.submission", ".env"],
-    index=0 if run.endswith("submission") else 1,
-    help="Which credentials to query for live positions. Must match the run.")
-if st.sidebar.button("Refresh now"):
-    st.cache_data.clear()
+runs = sorted(d.replace("\\", "/") for d in glob.glob("results/*") if os.path.isdir(d))
+run = RUN if RUN in runs else (runs[-1] if runs else None)
+env_file = ENV_FILE
+if run is None:
+    st.error("No runs under results/. Start the swarm: python main.py --tag submission")
+    st.stop()
 
 decisions = read_jsonl(f"{run}/oracle_log.jsonl")
 trades = read_jsonl(f"{run}/trade_log.jsonl")
@@ -407,6 +409,7 @@ with tabs[4]:
         st.caption(f"{len(h)} observations - " + " - ".join(
             f"{u}: {n}" for u, n in h["underlying"].value_counts().items()))
 
-st.sidebar.divider()
-st.sidebar.caption(f"Last decision: {last.get('ts', '?')}")
-st.sidebar.caption(f"Now: {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
+st.divider()
+st.caption(f"Last Oracle decision {last.get('ts', '?')} · "
+           f"rendered {datetime.now(timezone.utc).isoformat(timespec='seconds')} · "
+           f"source `{run}`")

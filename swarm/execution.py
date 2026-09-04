@@ -250,7 +250,7 @@ class Executor:
         today = await asyncio.to_thread(self.data.today)
         for sig_id, alloc in decision.allocations.items():
             agent, _, underlying = sig_id.partition(":")
-            sig = self.bus.latest.get((agent, underlying))
+            sig = self.bus.get(agent, underlying)
             if sig is None:
                 continue
             last = self._sent.get(sig_id)
@@ -366,7 +366,7 @@ class PositionManager:
                     continue                       # unquotable this cycle - hold
                 front_dte = min((parse_occ(l["symbol"])[1] - today).days
                                 for l in rec["legs"])
-                live = self.bus.latest.get((rec["agent"], rec["underlying"]))
+                live = self.bus.get(rec["agent"], rec["underlying"])
                 reason = exit_reason(
                     rec["agent"], entry_debit=rec["net_debit"], mark=mark,
                     front_dte=front_dte, spot=snap["spot"],

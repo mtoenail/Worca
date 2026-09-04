@@ -141,7 +141,7 @@ class ShadowBook:
     def _exit_reason(self, pos, spot, today):
         """Delegates to swarm.exits so the live book cannot diverge from this one."""
         front_dte = min((date.fromisoformat(l["exp"]) - today).days for l in pos.legs)
-        live = self.bus.latest.get((pos.agent, pos.underlying))
+        live = self.bus.get(pos.agent, pos.underlying)
         return exit_reason(
             pos.agent, entry_debit=pos.entry_debit, mark=pos.mark, front_dte=front_dte,
             spot=spot, wall_strike=pos.meta.get("wall_strike"),

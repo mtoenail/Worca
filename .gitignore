@@ -1,14 +1,27 @@
 .venv/
 __pycache__/
 *.pyc
+
+# Secrets. .env.example is the committed template.
 .env
 .env.*
 !.env.example
+
+# Working files at the repo root are scratch; the committed evidence lives in results/.
 *.csv
 _t_*.csv
 *.legacy
-
+*.log
+*.err
 oracle_log.jsonl
 trade_log.jsonl
 shadow_book.json
 shadow_equity.csv
+
+# results/ is the audit trail a reader is meant to open: the Oracle's decisions, the
+# orders and why they were gated, and the swarm-vs-solo equity curves. Committed.
+!results/
+!results/**/*.csv
+!results/**/*.jsonl
+!results/**/*.json
+!results/**/*.log

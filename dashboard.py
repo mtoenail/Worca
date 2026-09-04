@@ -54,15 +54,35 @@ def read_json(path):
         return {}
 
 
+def _creds(env_file):
+    """Alpaca credentials, from Streamlit secrets first, then a local .env file.
+
+    Deployed on Streamlit Cloud there is no .env - the file is gitignored and must stay
+    that way - so secrets are the only source. Locally there are no secrets, so the .env
+    file is. Either may be absent: the dashboard's file-based panels read committed
+    artifacts and do not need an account at all.
+    """
+    try:
+        sec = st.secrets
+        key = sec.get("ALPACA_API_KEY")
+        if key:
+            return key, sec.get("ALPACA_SECRET_KEY")
+    except Exception:
+        pass                                  # no secrets.toml - expected locally
+    from dotenv import dotenv_values
+    cfg = dotenv_values(env_file)
+    return cfg.get("ALPACA_API_KEY"), cfg.get("ALPACA_SECRET_KEY")
+
+
 @st.cache_data(ttl=30)
 def account_state(env_file):
     """Live account and positions. Returns (info, positions_df, error)."""
     try:
-        from dotenv import dotenv_values
         from alpaca.trading.client import TradingClient
-        cfg = dotenv_values(env_file)
-        cli = TradingClient(cfg.get("ALPACA_API_KEY"), cfg.get("ALPACA_SECRET_KEY"),
-                            paper=True)
+        key, secret = _creds(env_file)
+        if not key or not secret:
+            return None, pd.DataFrame(), "no credentials configured"
+        cli = TradingClient(key, secret, paper=True)
         a = cli.get_account()
         pos = [{"symbol": p.symbol, "qty": float(p.qty),
                 "avg_entry": float(p.avg_entry_price),
@@ -128,7 +148,8 @@ c[3].metric("Oracle decisions", len(decisions),
 c[4].metric("Deployed", f"{last.get('deployed_fraction', 0):.0%}",
             f"{1 - last.get('deployed_fraction', 0):.0%} cash", delta_color="off")
 if acct_err:
-    st.warning(f"Account unavailable ({acct_err}). File-based panels below are unaffected.")
+    st.info(f"Live account panel is off ({acct_err}). Everything below is rendered from the "
+            "committed run artifacts in `results/`, which is the full audit trail.")
 
 tabs = st.tabs(["Signals", "Oracle", "Orders & risk", "Swarm vs solo", "History"])
 

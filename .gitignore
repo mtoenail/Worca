@@ -30,3 +30,6 @@ shadow_equity.csv
 results/warmup/
 
 !docs/**/*.png
+
+# Streamlit secrets must never be committed; the .example template is the guide.
+.streamlit/secrets.toml

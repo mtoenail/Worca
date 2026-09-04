@@ -50,7 +50,15 @@ def publish():
     c = run("git", "commit", "-m", f"Live artifacts {stamp}")
     if c.returncode:
         return f"commit failed: {c.stderr.strip()[:120]}"
-    p = run("git", "push", "origin", "HEAD")
+    # Rebase before pushing. The remote moves for reasons that have nothing to do with
+    # this process - a commit made through the GitHub web UI diverged the branch on
+    # 2026-09-04 and every subsequent push was rejected as non-fast-forward, silently
+    # freezing the deployed dashboard while the local one kept updating.
+    pull = run("git", "pull", "--rebase", "--autostash", "origin", "main")   # swarm writes mid-cycle
+    if pull.returncode:
+        run("git", "rebase", "--abort")
+        return f"rebase failed (will retry): {pull.stderr.strip()[:120]}"
+    p = run("git", "push", "origin", "HEAD:main")
     if p.returncode:
         return f"push failed (will retry): {p.stderr.strip()[:120]}"
     return f"published {len(staged)} file(s)"

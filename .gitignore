@@ -25,3 +25,6 @@ shadow_equity.csv
 !results/**/*.jsonl
 !results/**/*.json
 !results/**/*.log
+
+# warmup is a throwaway run kept only to accumulate history before the open
+results/warmup/

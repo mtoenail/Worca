@@ -90,6 +90,13 @@ class ShadowBook:
         """
         if self.executor is None:
             return
+        # The baseline is "each agent trades its own signals alone" - and a solo agent
+        # could not enter before the bell either. Without this the shadow book would open
+        # at stale pre-open marks while the executor sits behind the market_closed gate,
+        # and the swarm-vs-solo curve would be measuring that head start.
+        clock = await asyncio.to_thread(self.data.trade.get_clock)
+        if not getattr(clock, "is_open", False):
+            return
         today = await asyncio.to_thread(self.data.today)
         for (agent, underlying), sig in self.bus.snapshot().items():
             sid = f"{agent}:{underlying}"

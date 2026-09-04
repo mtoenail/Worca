@@ -28,3 +28,5 @@ shadow_equity.csv
 
 # warmup is a throwaway run kept only to accumulate history before the open
 results/warmup/
+
+!docs/**/*.png

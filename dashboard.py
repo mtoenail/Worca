@@ -10,12 +10,14 @@ from datetime import datetime, timezone
 import altair as alt
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Worca", page_icon=":satellite:", layout="wide")
 
 # A signal older than this is one the agent has stopped asserting - the bus expires it.
 # Mirrors swarm.bus.DEFAULT_TTL_S so this panel agrees with what the executor can see.
 SIGNAL_TTL_S = 600
+REFRESH_MS = 30_000        # the page reloads itself; the swarm is always moving
 
 
 # ---------------------------------------------------------------- loading
@@ -125,6 +127,12 @@ trades = read_jsonl(f"{run}/trade_log.jsonl")
 equity = read_csv(f"{run}/shadow_equity.csv")
 book = read_json(f"{run}/shadow_book.json")
 
+# Auto-refresh: judges open this and watch it move. The swarm writes artifacts
+# continuously, so a static page would misrepresent a live system as a snapshot.
+components.html(
+    f"<script>setTimeout(function(){{window.parent.location.reload()}}, {REFRESH_MS})</script>",
+    height=0)
+
 st.title("Worca")
 st.caption("Two specialist agents publish signals; an LLM Oracle allocates capital between "
            "them; every order passes the risk gates before it is sent. A shadow book "
@@ -150,6 +158,25 @@ c[4].metric("Deployed", f"{last.get('deployed_fraction', 0):.0%}",
 if acct_err:
     st.info(f"Live account panel is off ({acct_err}). Everything below is rendered from the "
             "committed run artifacts in `results/`, which is the full audit trail.")
+
+# Freshness banner. A judge should be able to tell at a glance whether they are looking
+# at a running system or a committed snapshot, without taking our word for it.
+age = None
+try:
+    age = (datetime.now(timezone.utc)
+           - pd.to_datetime(last.get("ts"), utc=True)).total_seconds()
+except Exception:
+    pass
+cols = st.columns([2, 3])
+with cols[0]:
+    if age is not None and age < 600:
+        st.success(f"LIVE — last Oracle decision {int(age)}s ago")
+    elif age is not None:
+        st.warning(f"Snapshot — last Oracle decision {age / 3600:.1f}h ago "
+                   f"(the swarm is not currently writing to this run)")
+with cols[1]:
+    st.caption(f"Run `{run}` · {len(decisions)} decisions · {len(trades)} order attempts · "
+               f"page reloads every {REFRESH_MS // 1000}s")
 
 tabs = st.tabs(["Signals", "Oracle", "Orders & risk", "Swarm vs solo", "History"])
 

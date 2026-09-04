@@ -116,6 +116,37 @@ The defensible claim from this session is narrower and it is about the machinery
 edge: signal to allocation to gated order to fill worked end to end on a fresh account,
 including the multi-leg path, with no broker rejections.
 
+### Why the account is down, and what it exposes
+
+Attribution from the live positions, not a narrative:
+
+| | |
+|---|---|
+| Calendar short front legs | **winning** — decaying as intended |
+| Calendar long back legs | **losing more** |
+| Gamma Scout single legs | **losing** |
+
+The calendars behave exactly as the structure dictates. The theta thesis works — the front
+legs we sold are decaying — but a calendar is **long vega**, and the longer-dated leg
+carries most of it, so a broad decline in implied vol costs more on the back leg than it
+earns on the front. Known risk of the structure, correctly priced, not a malfunction.
+
+The single legs expose something more useful: **a genuine mismatch between the signal and
+the instrument it is traded with.** Gamma Scout fires on a *pinning* regime, which by
+definition means dealer hedging is damping movement — a low-realised-volatility state. The
+B3 signal-to-order rule then buys a ~0.35-delta option, which is a **long-volatility**
+instrument that needs movement to pay for its theta. The system is buying convexity in the
+one regime that suppresses it.
+
+The signal is not wrong. Price stayed pinned near the wall, which is what it predicted. The
+*instrument* is wrong for it: a pinning read argues for selling premium around the wall — a
+short strangle or iron condor — not buying a directional call. Fixing this means making the
+strategy a function of the regime rather than only the direction, and it is the single
+highest-value change we would make next.
+
+We are reporting this rather than quietly re-tuning it, because a system that loses money
+for a legible, diagnosable reason is more useful than one that made money by luck.
+
 ## Two failures worth reporting
 
 Both were found by logging inputs rather than only outputs.

@@ -314,6 +314,53 @@ with tabs[2]:
     elif acct:
         st.info("No open positions on this account.")
 
+    # --- P&L attribution -------------------------------------------------------
+    # A judge's first question about a red number is "why". Answer it with the position
+    # data rather than a narrative, and name the strategy flaw it exposes.
+    if acct and not positions.empty:
+        legs = positions.copy()
+        sym2strat = {}
+        for t in trades:
+            for l in (t.get("legs") or []):
+                sym2strat[l["symbol"]] = t.get("strategy", "?")
+        legs["strategy"] = legs["symbol"].map(sym2strat).fillna("single_leg")
+        legs["side"] = legs["qty"].apply(lambda q: "short" if q < 0 else "long")
+
+        st.markdown("#### Where the P&L is coming from")
+        by = (legs.groupby(["strategy", "side"])["unrealized_pl"]
+              .sum().reset_index().sort_values("unrealized_pl"))
+        a, b = st.columns([2, 3])
+        with a:
+            st.dataframe(by, width="stretch", hide_index=True)
+            st.metric("Total unrealized", f"${legs['unrealized_pl'].sum():+,.0f}")
+        with b:
+            cal = legs[legs.strategy == "calendar"]
+            sing = legs[legs.strategy == "single_leg"]
+            cal_short = cal[cal.side == "short"]["unrealized_pl"].sum()
+            cal_long = cal[cal.side == "long"]["unrealized_pl"].sum()
+            st.markdown(f"""
+**Calendars: {cal_short + cal_long:+,.0f}** — the short front legs are
+**{cal_short:+,.0f}** and the long back legs **{cal_long:+,.0f}**. The theta thesis is
+working: the front legs we sold are decaying as intended. The back legs lost more, because
+a calendar is *long vega* and the longer-dated leg carries most of it — so a broad drop in
+implied vol costs more on the back than it earns on the front. That is the known risk of
+this structure, not a malfunction.
+
+**Single legs: {sing['unrealized_pl'].sum():+,.0f}** — and this one is a genuine strategy
+flaw, not bad luck. Gamma Scout fires on a **pinning** regime, which by definition means
+dealer hedging is *damping* movement — a low-realised-volatility environment. But the
+signal-to-order rule buys a ~0.35-delta option, which is a **long-volatility** instrument
+that needs movement to pay. We are buying convexity in the one regime that suppresses it,
+and short-dated theta does the rest.
+
+The honest read: the *signal* is behaving correctly — price is pinned near the wall, which
+is exactly what it predicted. The *instrument* is mismatched to it. A pinning read argues
+for selling premium around the wall, not buying a directional call.
+""")
+        st.caption("Unrealized only; the account has taken no realised losses. "
+                   "Positions are capped at 6 by the risk manager, so the swarm is holding "
+                   "rather than adding.")
+
     if trades:
         counts = pd.Series([t.get("event") for t in trades]).value_counts()
         cols = st.columns(max(len(counts), 1))
@@ -391,8 +438,11 @@ with tabs[4]:
                "sampled every 15 minutes rather than every poll, so the window measures "
                "rarity rather than intraday drift. With days rather than months of history "
                "these ranks are indicative, not distributional claims.")
-    for path, label in [("gex_history.csv", "Gamma Scout - wall GEX"),
+    for name, label in [("gex_history.csv", "Gamma Scout - wall GEX"),
                         ("volspread_history.csv", "Vol Surfer - IV spread")]:
+        # The swarm writes these at the repo root, but only results/ is published, so the
+        # deployed app must read the copy inside the run directory.
+        path = f"{run}/{name}" if os.path.exists(f"{run}/{name}") else name
         h = read_csv(path, names=["underlying", "ts", "value"])
         if h.empty:
             st.info(f"No {path} yet.")

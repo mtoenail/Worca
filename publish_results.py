@@ -11,6 +11,7 @@ credentials file - cannot be swept in by a background process nobody is watching
     python publish_results.py --interval 300
 """
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -33,8 +34,28 @@ def guard_no_secrets():
         sys.exit(f"REFUSING TO PUBLISH - credential files are tracked: {bad}")
 
 
+HISTORY = ("gex_history.csv", "volspread_history.csv")
+RUN_DIR = "results/submission"
+
+
+def sync_history():
+    """Copy the agents' history CSVs into the published run directory.
+
+    The agents write these at the repo root, which is gitignored as a working file, so
+    without this the deployed dashboard's History tab has nothing to read.
+    """
+    import shutil
+    for name in HISTORY:
+        if os.path.exists(name) and os.path.isdir(RUN_DIR):
+            try:
+                shutil.copyfile(name, os.path.join(RUN_DIR, name))
+            except OSError:
+                pass                      # mid-write; the next cycle picks it up
+
+
 def publish():
     """Stage only results/, commit if anything changed, push. Returns a status string."""
+    sync_history()
     run("git", "add", "--", TRACKED)
     staged = run("git", "diff", "--cached", "--name-only").stdout.split()
     if not staged:

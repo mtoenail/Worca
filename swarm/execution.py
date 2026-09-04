@@ -360,15 +360,19 @@ class PositionManager:
         today = await asyncio.to_thread(self.data.today)
         for coid, rec in list(self.open_trades.items()):
             try:
-                snap = await asyncio.to_thread(self.data.get, rec["underlying"])
+                # The submitted record carries signal_id ("gamma_scout:NVDA") but not the
+                # agent and underlying separately. Derive them rather than widening the
+                # log format, so positions written by an earlier build still exit.
+                agent, _, underlying = rec["signal_id"].partition(":")
+                snap = await asyncio.to_thread(self.data.get, underlying)
                 mark = self._mark(rec, snap["chain"])
                 if mark is None:
                     continue                       # unquotable this cycle - hold
                 front_dte = min((parse_occ(l["symbol"])[1] - today).days
                                 for l in rec["legs"])
-                live = self.bus.get(rec["agent"], rec["underlying"])
+                live = self.bus.get(agent, underlying)
                 reason = exit_reason(
-                    rec["agent"], entry_debit=rec["net_debit"], mark=mark,
+                    agent, entry_debit=rec["net_debit"], mark=mark,
                     front_dte=front_dte, spot=snap["spot"],
                     wall_strike=(rec.get("meta") or {}).get("wall_strike"),
                     live_zscore=(live.data.get("zscore") if live else None))

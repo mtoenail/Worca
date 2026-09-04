@@ -82,8 +82,39 @@ allocation, at a fixed 10% size — the no-Oracle baseline. It uses the executor
 builder, so both books hold *identical contracts*, and the same exit rules. The only
 difference between the two equity curves is the Oracle's sizing.
 
-*(Results: see `results/submission/shadow_equity.csv` against the account's portfolio
-history — to be completed after the session.)*
+### Live session, 2026-09-04
+
+Account **PA3YDAINTVU4**, opened fresh that morning, traded from the 09:30 ET open.
+
+| | |
+|---|---|
+| Orders sent | 3 |
+| Filled | 3 — **one single-leg, two multi-leg calendars** |
+| Rejected or errored at the broker | 0 |
+| Equity | $100,000 -> **$100,413.15** (+$413.15) |
+| Unrealized on open legs | +$436.00 |
+
+```
+13:34:16Z  SIMPLE  NVDA260911C00237500      10 @ $2.09
+13:36:31Z  MLEG    SPY calendar (770)        6 @ $14.66   sell 260918 / buy 261120
+13:51:24Z  MLEG    SPY calendar (775)        6 @ $15.00   sell 260918 / buy 261120
+```
+
+The full chain ran unattended: `gamma_scout` detected NVDA pinning at the dealer wall ->
+the Oracle allocated 0.5 -> the risk gates sized it to the 10-contract cap -> the executor
+selected the ~0.35-delta strike -> filled at $2.09 against a $2.10 limit.
+
+**The solo baseline is not reported as a P&L comparison, and should not be.** It recorded
+roughly +$6,000 against the live account's +$413 on the same signals. A 10x divergence is
+not an allocation effect — it is a marking artefact: the shadow book marks to mid on a
+chain whose opening spreads were wide and erratic, and it opened at the bell where the
+live book filled minutes later at executable prices. The apparatus works and is the right
+control, but one session of opening-auction marks cannot support a swarm-vs-solo claim,
+and presenting that number as a result would be dishonest.
+
+The defensible claim from this session is narrower and it is about the machinery, not the
+edge: signal to allocation to gated order to fill worked end to end on a fresh account,
+including the multi-leg path, with no broker rejections.
 
 ## Two failures worth reporting
 
@@ -136,6 +167,14 @@ All evidence-backed, from live runs.
   underlyings cannot support a claim about profitability.
 - **Paper fills are optimistic.** Alpaca paper does not model queue position or the market
   impact of crossing a spread, and the calendar spread crosses two.
+- **Agent cadence is 2-4x slower than the poll interval.** `interval_s` is 60s, but that is
+  the sleep between passes; a pass fetches chains and paginates open interest per
+  underlying. Measured publish gaps on 2026-09-04 were 120-270s, with one of 870s. The bus
+  TTL is now derived from that measurement rather than from the configured interval.
+- **A restart is expensive during market hours.** The open-interest cache is in-memory, so
+  a restart re-paginates every contract, and `MarketData`'s per-underlying lock serialises
+  the agents and the shadow book behind that first fetch. Cold start costs several minutes
+  of signal silence — a fix applied mid-session can cost more than the problem it solves.
 
 ## What I would do next
 

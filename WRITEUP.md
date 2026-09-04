@@ -136,7 +136,9 @@ precondition lapses, and the agent then publishes nothing — but the bus kept t
 signal indefinitely, so silence was read as *"the previous signal"* rather than *"no
 signal"*. The Oracle was found allocating capital to a `gamma_scout:SPY` signal **77,610
 seconds (21.5 hours) old**, and at the next open the executor would have built a live order
-from those overnight strikes. Signals now expire after 300s — five poll intervals. This is
+from those overnight strikes. Signals now expire after 600s, a figure derived from the
+agents' *measured* republish cadence rather than their configured poll interval — the
+first attempt used the interval and was too tight, starving the Oracle. This is
 distinct from the B4 staleness check, which refuses to *publish* a signal computed on stale
 market data; this one expires a signal that was fresh when published and was never renewed.
 
